@@ -1,5 +1,5 @@
 import { 
-  coupons, brands, categories, feedback,
+  coupons, brands, categories, feedback, clicks,
   type Coupon, type InsertCoupon, type Brand, type Category, type Feedback, type CreateFeedbackRequest
 } from "@shared/schema";
 import { db } from "./db";
@@ -7,18 +7,24 @@ import { eq, desc, and, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Coupons
-  getCoupons(filters?: { categoryId?: number; brandId?: number; search?: string; sort?: string }): Promise<(Coupon & { brand: Brand | null; category: Category | null })[]>;
+  getCoupons(filters?: { categoryId?: number; brandId?: number; search?: string; sort?: string; includeInactive?: boolean }): Promise<(Coupon & { brand: Brand | null; category: Category | null })[]>;
   getCoupon(id: number): Promise<(Coupon & { brand: Brand | null; category: Category | null }) | undefined>;
   createCoupon(coupon: InsertCoupon): Promise<Coupon>;
   updateCoupon(id: number, updates: Partial<InsertCoupon>): Promise<Coupon | undefined>;
+  deleteCoupon(id: number): Promise<void>;
   
-  // Feedback
+  // Feedback & Analytics
   createFeedback(feedback: CreateFeedbackRequest): Promise<Feedback>;
   getCouponFeedbackStats(couponId: number): Promise<{ positive: number; total: number }>;
+  recordClick(couponId: number, userId?: string): Promise<number>;
+  recordConversion(couponId: number): Promise<number>;
+  getAdminAnalytics(): Promise<{ totalClicks: number; totalConversions: number; topCoupons: any[] }>;
 
   // Brands & Categories
   getBrands(): Promise<Brand[]>;
+  getOrCreateBrand(name: string, slug?: string): Promise<Brand>;
   getCategories(): Promise<Category[]>;
+  getOrCreateCategory(name: string, slug?: string, icon?: string): Promise<Category>;
   
   // Seeding
   seedCategories(cats: { name: string; slug: string; icon: string }[]): Promise<void>;
@@ -26,7 +32,7 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async getCoupons(filters?: { categoryId?: number; brandId?: number; search?: string; sort?: string }) {
+  async getCoupons(filters?: { categoryId?: number; brandId?: number; search?: string; sort?: string; includeInactive?: boolean }) {
     let query = db.select({
       coupon: coupons,
       brand: brands,
@@ -36,7 +42,10 @@ export class DatabaseStorage implements IStorage {
     .leftJoin(brands, eq(coupons.brandId, brands.id))
     .leftJoin(categories, eq(coupons.categoryId, categories.id));
 
-    const conditions = [eq(coupons.isActive, true)];
+    const conditions = [];
+    if (!filters?.includeInactive) {
+      conditions.push(eq(coupons.isActive, true));
+    }
 
     if (filters?.categoryId) {
       conditions.push(eq(coupons.categoryId, filters.categoryId));
@@ -48,7 +57,6 @@ export class DatabaseStorage implements IStorage {
       conditions.push(sql`(${coupons.title} ILIKE ${`%${filters.search}%`} OR ${coupons.code} ILIKE ${`%${filters.search}%`})`);
     }
 
-    // Default sort by success score then date
     let orderBy = [desc(coupons.successScore), desc(coupons.createdAt)];
     if (filters?.sort === 'newest') {
       orderBy = [desc(coupons.createdAt)];
@@ -56,7 +64,7 @@ export class DatabaseStorage implements IStorage {
       orderBy = [desc(coupons.expiryDate)];
     }
 
-    const results = await query.where(and(...conditions)).orderBy(...orderBy);
+    const results = await query.where(conditions.length ? and(...conditions) : undefined).orderBy(...orderBy);
     
     return results.map(r => ({
       ...r.coupon,
@@ -97,6 +105,10 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async deleteCoupon(id: number) {
+    await db.delete(coupons).where(eq(coupons.id, id));
+  }
+
   async createFeedback(insertFeedback: CreateFeedbackRequest) {
     const [fb] = await db.insert(feedback).values(insertFeedback).returning();
     return fb;
@@ -116,12 +128,60 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async recordClick(couponId: number, userId?: string) {
+    await db.insert(clicks).values({ couponId, userId });
+    const [updated] = await db.update(coupons)
+      .set({ clickCount: sql`${coupons.clickCount} + 1` })
+      .where(eq(coupons.id, couponId))
+      .returning({ clickCount: coupons.clickCount });
+    return updated.clickCount || 0;
+  }
+
+  async recordConversion(couponId: number) {
+    const [updated] = await db.update(coupons)
+      .set({ conversionCount: sql`${coupons.conversionCount} + 1` })
+      .where(eq(coupons.id, couponId))
+      .returning({ conversionCount: coupons.conversionCount });
+    return updated.conversionCount || 0;
+  }
+
+  async getAdminAnalytics() {
+    const [stats] = await db.select({
+      totalClicks: sql<number>`sum(${coupons.clickCount})`,
+      totalConversions: sql<number>`sum(${coupons.conversionCount})`
+    }).from(coupons);
+
+    const topCoupons = await this.getCoupons({ sort: 'popular', includeInactive: true });
+
+    return {
+      totalClicks: Number(stats?.totalClicks || 0),
+      totalConversions: Number(stats?.totalConversions || 0),
+      topCoupons: topCoupons.slice(0, 5)
+    };
+  }
+
   async getBrands() {
     return await db.select().from(brands);
   }
 
+  async getOrCreateBrand(name: string, slug?: string) {
+    const safeSlug = slug || name.toLowerCase().replace(/ /g, '-');
+    const [existing] = await db.select().from(brands).where(eq(brands.slug, safeSlug));
+    if (existing) return existing;
+    const [brand] = await db.insert(brands).values({ name, slug: safeSlug }).returning();
+    return brand;
+  }
+
   async getCategories() {
     return await db.select().from(categories);
+  }
+
+  async getOrCreateCategory(name: string, slug?: string, icon?: string) {
+    const safeSlug = slug || name.toLowerCase().replace(/ /g, '-');
+    const [existing] = await db.select().from(categories).where(eq(categories.slug, safeSlug));
+    if (existing) return existing;
+    const [category] = await db.insert(categories).values({ name, slug: safeSlug, icon: icon || 'Tag' }).returning();
+    return category;
   }
 
   async seedCategories(cats: { name: string; slug: string; icon: string }[]) {

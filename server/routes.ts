@@ -23,22 +23,19 @@ export async function registerRoutes(
       categoryId: req.query.categoryId ? Number(req.query.categoryId) : undefined,
       brandId: req.query.brandId ? Number(req.query.brandId) : undefined,
       sort: req.query.sort as string,
+      includeInactive: req.query.includeInactive === 'true',
     };
     const coupons = await storage.getCoupons(filters);
     res.json(coupons);
   });
 
-  app.get(api.coupons.get.path, async (req, res) => {
-    const coupon = await storage.getCoupon(Number(req.params.id));
-    if (!coupon) return res.status(404).json({ message: "Coupon not found" });
-    res.json(coupon);
-  });
-
-  app.post(api.coupons.create.path, async (req, res) => {
+  app.patch(api.coupons.update.path, async (req, res) => {
     try {
-      const input = api.coupons.create.input.parse(req.body);
-      const coupon = await storage.createCoupon(input);
-      res.status(201).json(coupon);
+      const id = Number(req.params.id);
+      const input = api.coupons.update.input.parse(req.body);
+      const coupon = await storage.updateCoupon(id, input);
+      if (!coupon) return res.status(404).json({ message: "Coupon not found" });
+      res.json(coupon);
     } catch (err) {
       if (err instanceof z.ZodError) {
         res.status(400).json({ message: err.errors[0].message });
@@ -46,75 +43,41 @@ export async function registerRoutes(
     }
   });
 
-  // === AI VALIDATION ===
-  app.post(api.coupons.validate.path, async (req, res) => {
-    const id = Number(req.params.id);
-    const coupon = await storage.getCoupon(id);
-    if (!coupon) return res.status(404).json({ message: "Coupon not found" });
-
-    // AI Scoring Logic
-    try {
-      const stats = await storage.getCouponFeedbackStats(id);
-      
-      const prompt = `
-        Analyze this coupon for "Deal Duniya":
-        Title: ${coupon.title}
-        Code: ${coupon.code}
-        Expiry: ${coupon.expiryDate}
-        Last Verified: ${coupon.lastVerified}
-        User Feedback: ${stats.positive} worked out of ${stats.total} total.
-        
-        Calculate a success probability score (0-100) and confidence level.
-        Return ONLY JSON: { "successScore": number, "confidence": "high"|"medium"|"low", "analysis": "short reasoning" }
-      `;
-
-      // Using the openai client from the integration we added
-      // Note: Replit integration might export 'openai' differently, we need to import it correctly.
-      // I'll assume standard OpenAI usage as per integration.
-      const aiResponse = await openai.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-      });
-
-      const result = JSON.parse(aiResponse.choices[0].message.content || "{}");
-      
-      // Update coupon score
-      if (result.successScore !== undefined) {
-        await storage.updateCoupon(id, { successScore: result.successScore });
-      }
-
-      res.json(result);
-    } catch (error) {
-      console.error("AI Validation failed:", error);
-      res.status(500).json({ message: "AI Analysis failed" });
-    }
+  app.delete(api.coupons.delete.path, async (req, res) => {
+    await storage.deleteCoupon(Number(req.params.id));
+    res.status(204).send();
   });
 
-  // === FEEDBACK & VOTING ===
-  app.post(api.coupons.vote.path, async (req, res) => {
-    const id = Number(req.params.id);
-    const { worked } = req.body;
-    
-    // Record feedback
-    await storage.createFeedback({
-      couponId: id,
-      worked,
-      userId: (req as any).user?.claims?.sub, // Optional user tracking
-    });
+  app.post(api.coupons.click.path, async (req, res) => {
+    const clickCount = await storage.recordClick(Number(req.params.id), (req as any).user?.claims?.sub);
+    res.json({ clickCount });
+  });
 
-    // Simple heuristic update (AI can do deeper update later)
-    const stats = await storage.getCouponFeedbackStats(id);
-    const newScore = Math.round((stats.positive / stats.total) * 100);
-    
-    await storage.updateCoupon(id, { successScore: newScore });
+  app.post(api.coupons.convert.path, async (req, res) => {
+    const conversionCount = await storage.recordConversion(Number(req.params.id));
+    res.json({ conversionCount });
+  });
 
-    res.json({ successScore: newScore });
+  // === ADMIN ANALYTICS ===
+  app.get(api.analytics.dashboard.path, async (req, res) => {
+    const stats = await storage.getAdminAnalytics();
+    res.json(stats);
   });
 
   // === BRANDS & CATEGORIES ===
   app.get(api.brands.list.path, async (req, res) => res.json(await storage.getBrands()));
+  app.post(api.brands.create.path, async (req, res) => {
+    const { name, slug } = api.brands.create.input.parse(req.body);
+    const brand = await storage.getOrCreateBrand(name, slug);
+    res.status(201).json(brand);
+  });
+
   app.get(api.categories.list.path, async (req, res) => res.json(await storage.getCategories()));
+  app.post(api.categories.create.path, async (req, res) => {
+    const { name, slug, icon } = api.categories.create.input.parse(req.body);
+    const category = await storage.getOrCreateCategory(name, slug, icon);
+    res.status(201).json(category);
+  });
 
   // === SEED DATA ===
   await seedDatabase();

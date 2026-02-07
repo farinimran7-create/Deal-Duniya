@@ -26,9 +26,10 @@ export const api = {
         categoryId: z.coerce.number().optional(),
         brandId: z.coerce.number().optional(),
         sort: z.enum(['newest', 'popular', 'expiring']).optional(),
+        includeInactive: z.coerce.boolean().optional(),
       }).optional(),
       responses: {
-        200: z.array(z.custom<any>()), // Coupon & { brand: Brand, category: Category }
+        200: z.array(z.custom<any>()),
       },
     },
     get: {
@@ -46,6 +47,23 @@ export const api = {
       responses: {
         201: z.custom<typeof coupons.$inferSelect>(),
         400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/coupons/:id' as const,
+      input: insertCouponSchema.partial(),
+      responses: {
+        200: z.custom<typeof coupons.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/coupons/:id' as const,
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
       },
     },
     validate: {
@@ -68,6 +86,22 @@ export const api = {
         200: z.object({ successScore: z.number() }),
         404: errorSchemas.notFound,
       },
+    },
+    click: {
+      method: 'POST' as const,
+      path: '/api/coupons/:id/click' as const,
+      responses: {
+        200: z.object({ clickCount: z.number() }),
+        404: errorSchemas.notFound,
+      },
+    },
+    convert: {
+      method: 'POST' as const,
+      path: '/api/coupons/:id/convert' as const,
+      responses: {
+        200: z.object({ conversionCount: z.number() }),
+        404: errorSchemas.notFound,
+      },
     }
   },
   brands: {
@@ -76,6 +110,14 @@ export const api = {
       path: '/api/brands' as const,
       responses: {
         200: z.array(z.custom<typeof brands.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/brands' as const,
+      input: z.object({ name: z.string(), slug: z.string(), logoUrl: z.string().optional() }),
+      responses: {
+        201: z.custom<typeof brands.$inferSelect>(),
       },
     },
   },
@@ -87,7 +129,28 @@ export const api = {
         200: z.array(z.custom<typeof categories.$inferSelect>()),
       },
     },
+    create: {
+      method: 'POST' as const,
+      path: '/api/categories' as const,
+      input: z.object({ name: z.string(), slug: z.string(), icon: z.string() }),
+      responses: {
+        201: z.custom<typeof categories.$inferSelect>(),
+      },
+    },
   },
+  analytics: {
+    dashboard: {
+      method: 'GET' as const,
+      path: '/api/admin/analytics' as const,
+      responses: {
+        200: z.object({
+          totalClicks: z.number(),
+          totalConversions: z.number(),
+          topCoupons: z.array(z.custom<any>()),
+        }),
+      },
+    },
+  }
 };
 
 export function buildUrl(path: string, params?: Record<string, string | number>): string {

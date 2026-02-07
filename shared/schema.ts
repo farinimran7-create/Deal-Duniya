@@ -36,9 +36,11 @@ export const coupons = pgTable("coupons", {
   successScore: integer("success_score").default(0), // 0-100
   lastVerified: timestamp("last_verified").defaultNow(),
   affiliateLink: text("affiliate_link").notNull(),
-  isActive: boolean("is_active").default(true),
+  isActive: boolean("is_active").default(false), // Admin approval required
   userId: text("user_id").references(() => users.id), // Submitted by
   createdAt: timestamp("created_at").defaultNow(),
+  clickCount: integer("click_count").default(0),
+  conversionCount: integer("conversion_count").default(0),
 });
 
 export const feedback = pgTable("feedback", {
@@ -47,6 +49,13 @@ export const feedback = pgTable("feedback", {
   userId: text("user_id").references(() => users.id),
   worked: boolean("worked").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const clicks = pgTable("clicks", {
+  id: serial("id").primaryKey(),
+  couponId: integer("coupon_id").references(() => coupons.id),
+  userId: text("user_id").references(() => users.id),
+  timestamp: timestamp("timestamp").defaultNow(),
 });
 
 // === RELATIONS ===
@@ -84,7 +93,9 @@ export const insertCouponSchema = createInsertSchema(coupons).omit({
   id: true, 
   createdAt: true, 
   lastVerified: true, 
-  successScore: true 
+  successScore: true,
+  clickCount: true,
+  conversionCount: true
 });
 
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({ 
