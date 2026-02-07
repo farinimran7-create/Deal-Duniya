@@ -1,0 +1,147 @@
+You are an expert SaaS product engineer, AI architect, and growth-focused startup builder.
+
+Your task is to design and generate a COMPLETE B2C PUBLIC MOBILE + WEB APPLICATION
+named: "Deal Duniya" inspired by Coupon Dunia website.
+
+App Purpose:
+Deal Duniya is an AI-powered coupon aggregator and validator app.
+The app DOES NOT generate coupons.
+It only collects existing public/affiliate coupons and intelligently ranks them
+based on success probability using AI.
+
+STRICT RULES:
+- Never generate fake or private coupon codes
+- Only work with public, affiliate, or user-submitted coupons
+- The app must be 100% legal and App Store compliant
+
+--------------------------------------------------
+CORE FEATURES (MUST IMPLEMENT)
+--------------------------------------------------
+
+1. USER APP (B2C)
+- User signup/login (email + OTP)
+- Categories:
+  - Flights
+  - Trains
+  - Hotels
+  - Shopping
+  - Food Delivery
+- Brand selection (Amazon, MakeMyTrip, Flipkart, etc.)
+- Education/Learning
+- Recharge
+- Kids,Babies & Toys
+-Sport & Fitness
+- Coupon cards showing:
+  - Coupon Code
+  - Discount value
+  - Success Probability (%)
+  - Last Verified Time
+  - Terms & Conditions
+- "Copy Code" button
+- "Worked / Not Worked" feedback button
+
+2. AI COUPON VALIDATION ENGINE
+- Calculate coupon success probability based on:
+  - User feedback
+  - Time since last success
+  - Expiry date
+  - Usage frequency
+- Rank coupons:
+  - High Success (Green)
+  - Medium Success (Yellow)
+  - Low Success (Red)
+- Auto-hide expired or low-confidence coupons
+
+3. AFFILIATE REDIRECTION
+- All coupons must redirect via affiliate tracking links
+- Track clicks and conversions
+- Store conversion data for analytics
+
+4. ADMIN PANEL
+- Add/Edit/Delete coupons
+- Approve user-submitted coupons
+- Brand & category management
+- Analytics dashboard:
+  - Clicks
+  - Conversions
+  - Top-performing coupons
+
+--------------------------------------------------
+AI PROMPTS (INTERNAL USE)
+--------------------------------------------------
+
+Coupon Scoring Prompt:
+"Analyze this coupon data and return a success probability score between 0–100
+based on expiry date, last successful use, user feedback ratio, and frequency of use."
+
+Fake Coupon Detection Prompt:
+"Detect if this coupon is likely expired or misleading based on user failure rate
+and time-based patterns."
+
+--------------------------------------------------
+TECH STACK (MANDATORY)
+--------------------------------------------------
+
+Frontend:
+- React or Next.js
+- Mobile-first responsive UI
+
+Backend:
+- Supabase
+  - Authentication
+  - Database
+  - Storage
+
+AI:
+- OpenAI or equivalent LLM
+- Used only for scoring, ranking, and validation
+
+Monetization:
+- Affiliate commission
+- Optional premium subscription (₹99–₹199/month)
+  - No ads
+  - Early access to high-success coupons
+
+--------------------------------------------------
+DATABASE STRUCTURE
+--------------------------------------------------
+
+Users:
+- id
+- email
+- created_at
+
+Coupons:
+- id
+- brand
+- category
+- code
+- expiry_date
+- affiliate_link
+- success_score
+- last_verified
+
+Feedback:
+- user_id
+- coupon_id
+- worked (true/false)
+- timestamp
+
+--------------------------------------------------
+SECURITY & LEGAL
+--------------------------------------------------
+- No scraping of private systems
+- No hacking or guessing coupons
+- GDPR compliant
+- Clear disclaimer: "Coupon success not guaranteed"
+
+--------------------------------------------------
+DELIVERABLES
+--------------------------------------------------
+- Full app UI
+- Backend APIs
+- AI scoring logic
+- Admin panel
+- Ready-to-deploy B2C SaaS
+
+Build the app step by step and ensure production-ready quality.
