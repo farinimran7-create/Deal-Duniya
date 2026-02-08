@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, Grid, PlusCircle, User, Ticket } from "lucide-react";
+import { Home, Grid, PlusCircle, User, Ticket, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@assets/Vibrant_logo_design_for_DealDuniya_1770491018249.png";
 import { useAuth } from "@/hooks/use-auth";
@@ -54,17 +54,25 @@ export function Navigation() {
                 Login
               </a>
             )}
+
+            {user?.isAdmin && (
+              <Link href="/admin">
+                <button className="p-2 rounded-full hover:bg-slate-100 text-slate-600 transition-colors" title="Admin Panel">
+                  <Shield className="w-5 h-5" />
+                </button>
+              </Link>
+            )}
           </div>
         </div>
       </header>
 
       {/* Mobile Bottom Navigation */}
       <div className="md:hidden fixed bottom-0 w-full z-50 bg-white border-t pb-safe">
-        <div className="grid grid-cols-5 h-16">
+        <div className={cn("grid h-16", user?.isAdmin ? "grid-cols-6" : "grid-cols-5")}>
           {navItems.map((item) => {
             const isActive = location === item.href;
             const Icon = item.icon;
-            
+
             return (
               <Link key={item.href} href={item.href} className="flex flex-col items-center justify-center gap-1 w-full h-full relative">
                 {item.isPrimary ? (
@@ -80,11 +88,19 @@ export function Navigation() {
               </Link>
             );
           })}
+          {user?.isAdmin && (
+            <Link href="/admin" className="flex flex-col items-center justify-center gap-1 w-full h-full relative">
+              <Shield className={cn("w-5 h-5 transition-colors", location.startsWith("/admin") ? "text-primary" : "text-muted-foreground")} />
+              <span className={cn("text-[10px] font-medium transition-colors", location.startsWith("/admin") ? "text-primary" : "text-muted-foreground")}>
+                Admin
+              </span>
+            </Link>
+          )}
         </div>
       </div>
-      
+
       {/* Spacer for fixed header/footer */}
-      <div className="h-16 md:h-20" /> 
+      <div className="h-16 md:h-20" />
     </>
   );
 }

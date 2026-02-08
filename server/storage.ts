@@ -1,6 +1,6 @@
-import { 
-  coupons, brands, categories, feedback, clicks,
-  type Coupon, type InsertCoupon, type Brand, type Category, type Feedback, type CreateFeedbackRequest
+import {
+  coupons, brands, categories, feedback, clicks, users,
+  type Coupon, type InsertCoupon, type Brand, type Category, type Feedback, type CreateFeedbackRequest, type User
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql } from "drizzle-orm";
@@ -12,7 +12,7 @@ export interface IStorage {
   createCoupon(coupon: InsertCoupon): Promise<Coupon>;
   updateCoupon(id: number, updates: Partial<InsertCoupon>): Promise<Coupon | undefined>;
   deleteCoupon(id: number): Promise<void>;
-  
+
   // Feedback & Analytics
   createFeedback(feedback: CreateFeedbackRequest): Promise<Feedback>;
   getCouponFeedbackStats(couponId: number): Promise<{ positive: number; total: number }>;
@@ -25,22 +25,35 @@ export interface IStorage {
   getOrCreateBrand(name: string, slug?: string): Promise<Brand>;
   getCategories(): Promise<Category[]>;
   getOrCreateCategory(name: string, slug?: string, icon?: string): Promise<Category>;
-  
+
   // Seeding
-  seedCategories(cats: { name: string; slug: string; icon: string }[]): Promise<void>;
+  // Seeding & Users
+  seedCategories(cats: { name: string; slug: string; icon: string; parentId?: number }[]): Promise<void>;
   seedBrands(brandsList: { name: string; slug: string; logoUrl: string }[]): Promise<void>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createUser(user: any): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
+  async getUserByEmail(email: string) {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async createUser(insertUser: any) {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
   async getCoupons(filters?: { categoryId?: number; brandId?: number; search?: string; sort?: string; includeInactive?: boolean }) {
     let query = db.select({
       coupon: coupons,
       brand: brands,
       category: categories,
     })
-    .from(coupons)
-    .leftJoin(brands, eq(coupons.brandId, brands.id))
-    .leftJoin(categories, eq(coupons.categoryId, categories.id));
+      .from(coupons)
+      .leftJoin(brands, eq(coupons.brandId, brands.id))
+      .leftJoin(categories, eq(coupons.categoryId, categories.id));
 
     const conditions = [];
     if (!filters?.includeInactive) {
@@ -65,7 +78,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const results = await query.where(conditions.length ? and(...conditions) : undefined).orderBy(...orderBy);
-    
+
     return results.map(r => ({
       ...r.coupon,
       brand: r.brand,
@@ -79,10 +92,10 @@ export class DatabaseStorage implements IStorage {
       brand: brands,
       category: categories,
     })
-    .from(coupons)
-    .leftJoin(brands, eq(coupons.brandId, brands.id))
-    .leftJoin(categories, eq(coupons.categoryId, categories.id))
-    .where(eq(coupons.id, id));
+      .from(coupons)
+      .leftJoin(brands, eq(coupons.brandId, brands.id))
+      .leftJoin(categories, eq(coupons.categoryId, categories.id))
+      .where(eq(coupons.id, id));
 
     if (!result) return undefined;
     return {
@@ -119,9 +132,9 @@ export class DatabaseStorage implements IStorage {
       total: sql<number>`count(*)`,
       positive: sql<number>`sum(case when ${feedback.worked} then 1 else 0 end)`
     })
-    .from(feedback)
-    .where(eq(feedback.couponId, couponId));
-    
+      .from(feedback)
+      .where(eq(feedback.couponId, couponId));
+
     return {
       total: Number(result[0]?.total || 0),
       positive: Number(result[0]?.positive || 0)
@@ -148,7 +161,9 @@ export class DatabaseStorage implements IStorage {
   async getAdminAnalytics() {
     const [stats] = await db.select({
       totalClicks: sql<number>`sum(${coupons.clickCount})`,
-      totalConversions: sql<number>`sum(${coupons.conversionCount})`
+      totalConversions: sql<number>`sum(${coupons.conversionCount})`,
+      totalCoupons: sql<number>`count(*)`,
+      pendingCoupons: sql<number>`sum(case when ${coupons.isActive} = false then 1 else 0 end)`
     }).from(coupons);
 
     const topCoupons = await this.getCoupons({ sort: 'popular', includeInactive: true });
@@ -156,6 +171,8 @@ export class DatabaseStorage implements IStorage {
     return {
       totalClicks: Number(stats?.totalClicks || 0),
       totalConversions: Number(stats?.totalConversions || 0),
+      totalCoupons: Number(stats?.totalCoupons || 0),
+      pendingCoupons: Number(stats?.pendingCoupons || 0),
       topCoupons: topCoupons.slice(0, 5)
     };
   }
@@ -176,15 +193,15 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(categories);
   }
 
-  async getOrCreateCategory(name: string, slug?: string, icon?: string) {
+  async getOrCreateCategory(name: string, slug?: string, icon?: string, parentId?: number) {
     const safeSlug = slug || name.toLowerCase().replace(/ /g, '-');
     const [existing] = await db.select().from(categories).where(eq(categories.slug, safeSlug));
     if (existing) return existing;
-    const [category] = await db.insert(categories).values({ name, slug: safeSlug, icon: icon || 'Tag' }).returning();
+    const [category] = await db.insert(categories).values({ name, slug: safeSlug, icon: icon || 'Tag', parentId }).returning();
     return category;
   }
 
-  async seedCategories(cats: { name: string; slug: string; icon: string }[]) {
+  async seedCategories(cats: { name: string; slug: string; icon: string; parentId?: number }[]) {
     await db.insert(categories).values(cats).onConflictDoNothing();
   }
 

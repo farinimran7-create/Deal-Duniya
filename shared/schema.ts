@@ -14,6 +14,7 @@ export const categories = pgTable("categories", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   icon: text("icon").notNull(), // Lucide icon name
+  parentId: integer("parent_id"),
 });
 
 export const brands = pgTable("brands", {
@@ -60,6 +61,18 @@ export const clicks = pgTable("clicks", {
 
 // === RELATIONS ===
 
+export const categoriesRelations = relations(categories, ({ one, many }) => ({
+  parent: one(categories, {
+    fields: [categories.parentId],
+    references: [categories.id],
+    relationName: "category_hierarchy",
+  }),
+  children: many(categories, {
+    relationName: "category_hierarchy",
+  }),
+  coupons: many(coupons),
+}));
+
 export const couponsRelations = relations(coupons, ({ one, many }) => ({
   category: one(categories, {
     fields: [coupons.categoryId],
@@ -89,18 +102,18 @@ export const feedbackRelations = relations(feedback, ({ one }) => ({
 
 // === BASE SCHEMAS ===
 
-export const insertCouponSchema = createInsertSchema(coupons).omit({ 
-  id: true, 
-  createdAt: true, 
-  lastVerified: true, 
-  successScore: true,
+export const insertCouponSchema = createInsertSchema(coupons).omit({
+  id: true,
+  createdAt: true,
+  lastVerified: true,
+
   clickCount: true,
   conversionCount: true
 });
 
-export const insertFeedbackSchema = createInsertSchema(feedback).omit({ 
-  id: true, 
-  createdAt: true 
+export const insertFeedbackSchema = createInsertSchema(feedback).omit({
+  id: true,
+  createdAt: true
 });
 
 // === EXPLICIT API CONTRACT TYPES ===
